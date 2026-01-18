@@ -1,19 +1,29 @@
 import { useState, useRef, useEffect } from 'react'
 import { markAsScanned } from '../db/database'
+import CameraScanner from './CameraScanner'
 
 const FEEDBACK_DURATION = 2000
 
 export default function ScanInput({ onScanComplete }) {
+  const [mode, setMode] = useState('manual') // 'camera' | 'manual'
   const [inputValue, setInputValue] = useState('')
   const [feedback, setFeedback] = useState(null) // { type: 'success' | 'warning' | 'error', message: string }
   const [processing, setProcessing] = useState(false)
   const inputRef = useRef(null)
   const feedbackTimeout = useRef(null)
 
-  // Auto-focus on mount dan setiap kali feedback berubah
+  // Detect device type for default mode
   useEffect(() => {
-    inputRef.current?.focus()
-  }, [feedback])
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+    setMode(isMobile ? 'camera' : 'manual')
+  }, [])
+
+  // Auto-focus on mount dan setiap kali feedback berubah (manual mode only)
+  useEffect(() => {
+    if (mode === 'manual') {
+      inputRef.current?.focus()
+    }
+  }, [feedback, mode])
 
   // Cleanup timeout on unmount
   useEffect(() => {
@@ -38,15 +48,7 @@ export default function ScanInput({ onScanComplete }) {
     }, FEEDBACK_DURATION)
   }
 
-  const handleKeyDown = async (e) => {
-    if (e.key !== 'Enter') return
-
-    const trackingNumber = inputValue.trim()
-    if (!trackingNumber) {
-      setInputValue('')
-      return
-    }
-
+  const processScan = async (trackingNumber) => {
     setProcessing(true)
 
     try {
@@ -63,10 +65,26 @@ export default function ScanInput({ onScanComplete }) {
     } catch (err) {
       showFeedback('error', `Error: ${err.message}`)
     } finally {
-      setInputValue('')
       setProcessing(false)
-      inputRef.current?.focus()
     }
+  }
+
+  const handleKeyDown = async (e) => {
+    if (e.key !== 'Enter') return
+
+    const trackingNumber = inputValue.trim()
+    if (!trackingNumber) {
+      setInputValue('')
+      return
+    }
+
+    await processScan(trackingNumber)
+    setInputValue('')
+    inputRef.current?.focus()
+  }
+
+  const handleCameraScan = async (trackingNumber) => {
+    await processScan(trackingNumber)
   }
 
   const getFeedbackStyle = () => {
@@ -118,29 +136,61 @@ export default function ScanInput({ onScanComplete }) {
     <div className="bg-white rounded-lg border border-gray-200 p-4">
       <h2 className="font-semibold text-gray-800 mb-3">Scan Barcode</h2>
 
-      <div className="relative">
-        <input
-          ref={inputRef}
-          type="text"
-          value={inputValue}
-          onChange={(e) => setInputValue(e.target.value)}
-          onKeyDown={handleKeyDown}
-          disabled={processing}
-          placeholder="Scan barcode disini..."
-          autoComplete="off"
-          autoCorrect="off"
-          autoCapitalize="off"
-          spellCheck="false"
-          className={`w-full p-3 text-lg border-2 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 ${getFeedbackStyle()} disabled:opacity-50`}
-        />
-
-        {/* Processing indicator */}
-        {processing && (
-          <div className="absolute right-3 top-1/2 -translate-y-1/2">
-            <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-          </div>
-        )}
+      {/* Toggle Button */}
+      <div className="flex gap-2 mb-3">
+        <button
+          onClick={() => setMode('camera')}
+          className={`flex-1 py-2 px-3 rounded font-medium transition-colors ${
+            mode === 'camera'
+              ? 'bg-blue-600 text-white'
+              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+          }`}
+        >
+          📷 Camera
+        </button>
+        <button
+          onClick={() => setMode('manual')}
+          className={`flex-1 py-2 px-3 rounded font-medium transition-colors ${
+            mode === 'manual'
+              ? 'bg-blue-600 text-white'
+              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+          }`}
+        >
+          ⌨️ Manual
+        </button>
       </div>
+
+      {/* Conditional Render: Camera or Manual */}
+      {mode === 'camera' ? (
+        <CameraScanner
+          onScanSuccess={handleCameraScan}
+          onError={(err) => showFeedback('error', err)}
+        />
+      ) : (
+        <div className="relative">
+          <input
+            ref={inputRef}
+            type="text"
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            onKeyDown={handleKeyDown}
+            disabled={processing}
+            placeholder="Scan barcode disini..."
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck="false"
+            className={`w-full p-3 text-lg border-2 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 ${getFeedbackStyle()} disabled:opacity-50`}
+          />
+
+          {/* Processing indicator */}
+          {processing && (
+            <div className="absolute right-3 top-1/2 -translate-y-1/2">
+              <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Feedback Message */}
       {feedback && (
@@ -151,7 +201,9 @@ export default function ScanInput({ onScanComplete }) {
       )}
 
       <p className="mt-2 text-xs text-gray-500">
-        Arahkan cursor ke input, lalu scan barcode dengan scanner
+        {mode === 'camera'
+          ? 'Arahkan camera ke barcode untuk scan otomatis'
+          : 'Arahkan cursor ke input, lalu scan barcode dengan scanner'}
       </p>
     </div>
   )
