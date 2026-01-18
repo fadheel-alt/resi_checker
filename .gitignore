@@ -27,6 +27,6 @@ dist-ssr
 .env.local
 .env.*.local
 
-.claude
+/.claude
 
 tech_doc.md
