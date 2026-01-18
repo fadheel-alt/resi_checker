@@ -26,7 +26,3 @@ dist-ssr
 # Environment variables
 .env.local
 .env.*.local
-
-/.claude
-
-tech_doc.md
